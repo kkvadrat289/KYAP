@@ -1,38 +1,60 @@
 #pragma once
 #include <iostream>
 #include <setjmp.h>
-#include "Classes.h"
+#include <vector>
+#include <list>
 
-extern CStack stack;
-int StackSize = 0;
-jmp_buf env;
+class CObject {
+public:
+	virtual ~CObject();
+	CObject();
+};
 
-#define TRY StackSize = stack.size(); switch (setjmp(env)) { case 0:
-#define CATCH(x) break; case x:
-#define THROW(x) stack.Unwind(StackSize); longjmp(env, x)
+class CDerived : public CObject {
+public:
+	~CDerived();
+	CDerived();
+};
 
-#define ETRY }
+class CStack {
+public:
+	void Push(CObject* obj);
+	void Pop();
+	int size() const;
+	void Unwind(const int size);
+private:
+	std::list<CObject*> stack;
+};
 
-#define EXCEPTION1 (42)
-#define EXCEPTION2 (1)
+class CScope {
+public:
+	CScope(int _stackSize);
+	jmp_buf& GetEnv();
+	int SetEnv();
+	int GetStackSize() const;
+
+	jmp_buf env;
+private:
+	int stackSize;
+};
 
 void f1();
 void f2();
 void f3();
 
+#define TRY  \
+	Scopes.emplace_back(stack.size()); \
+	CurrentScope++; \
+	switch (Scopes[CurrentScope].SetEnv()) { \
+		case 0:	   \
 
-void f1() {
-	CObject* o = new CObject;
-	f2();
-}
+#define CATCH(x) break; case x:
+#define THROW(x) {\
+	stack.Unwind(Scopes[CurrentScope].GetStackSize()); \
+	CurrentScope--;\
+	longjmp(Scopes[CurrentScope + 1].env, x);  \
+	}
+#define ETRY }
 
-void f2() {
-	CObject* o = new CObject;
-	f3();
-}
-
-void f3() {
-	CObject* o = new CObject;
-	THROW(EXCEPTION1);
-	std::cout << "after throw" << std::endl;
-}
+#define EXCEPTION1 (42)
+#define EXCEPTION2 (1)
